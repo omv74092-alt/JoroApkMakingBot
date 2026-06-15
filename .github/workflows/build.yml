@@ -1,0 +1,91 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'App Name'
+        required: true
+      package_name:
+        description: 'Package Name'
+        required: true
+        default: 'com.example.app'
+      app_url:
+        description: 'WebView URL'
+        required: false
+        default: ''
+      icon_url:
+        description: 'Icon URL'
+        required: false
+        default: ''
+      shizuku:
+        description: 'Shizuku Support'
+        required: false
+        default: 'false'
+      file_manager:
+        description: 'File Manager'
+        required: false
+        default: 'false'
+      login_screen:
+        description: 'Login Screen'
+        required: false
+        default: 'false'
+      dark_theme:
+        description: 'Dark Theme'
+        required: false
+        default: 'true'
+      key_system:
+        description: 'Key System'
+        required: false
+        default: 'false'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Inject Build Config
+        run: |
+          python3 scripts/inject_config.py \
+            --app_name "${{ github.event.inputs.app_name }}" \
+            --package "${{ github.event.inputs.package_name }}" \
+            --url "${{ github.event.inputs.app_url }}" \
+            --shizuku "${{ github.event.inputs.shizuku }}" \
+            --file_manager "${{ github.event.inputs.file_manager }}" \
+            --login_screen "${{ github.event.inputs.login_screen }}" \
+            --dark_theme "${{ github.event.inputs.dark_theme }}" \
+            --key_system "${{ github.event.inputs.key_system }}"
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ github.event.inputs.package_name }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 7
